@@ -320,6 +320,27 @@ class SampleIntegrationSpec extends Specification {
 - A cached Spring context carries over mutable bean state and DB rows between specs that share configuration. Prefer `@Transactional` rollback (default in `@DataJpaTest`) over `@DirtiesContext`, which evicts the cache and slows the whole suite — use it only as a last resort.
 - Groovy's dynamic typing means a typo or an unexpectedly "truthy" return value can silently pass a `then:`/`expect:` condition — type collaborator fields explicitly (required anyway for `@SpringBean`) and use `with()`/`verifyAll()` for structured assertions instead of loose chained conditions.
 
+## Coverage expectations
+
+Aim for **~80% line/branch coverage** on the code under test, driven by scenario completeness rather than chasing the number directly. For each unit under test (method/endpoint/handler), plan feature methods across:
+
+- **Main scenario** — the happy path / most common valid use case.
+- **Other paths** — alternative valid inputs, boundary values, empty/null-but-valid collections, branches (`if`/`switch`/ternary) not hit by the main scenario. Prefer a `where:` table over separate features when the only thing changing is input/output data.
+- **Exceptions/errors** — invalid input, failed preconditions, collaborator throws, mapped HTTP error responses. Assert via `thrown()`/`notThrown()` in `then:`, or the exact status/body for slice specs.
+
+If a method has no alternative-path or error-path branches, don't invent scenarios to hit a percentage — note that coverage is expected to be near 100% for that unit and move on. Treat a coverage shortfall as a signal to check for an untested branch, not as license to pad the count with redundant happy-path variants.
+
+### What to prioritize
+
+When time/scope is limited, spend it here first — these carry the most risk if untested:
+
+- **Business-critical paths** — code whose failure has direct business impact (e.g. payment processing, order validation, inventory reservation).
+- **Complex algorithms** — non-trivial branching or calculation logic (e.g. pricing, discount/tax calculations, eligibility rules) where a subtle bug is easy to introduce and hard to spot by inspection.
+- **Error handling** — exception paths, validation failures, and edge cases (nulls, empty collections, boundary values) that are easy to skip when only the happy path is exercised.
+- **Integration points** — boundaries to external APIs, databases, message queues, or other services, where contract mismatches and failure modes (timeouts, 4xx/5xx, malformed responses) surface.
+
+Simple getters/setters, DTOs/mappers with no logic, and framework boilerplate are low priority — don't spend feature methods on them just to move the coverage number.
+
 ## Checklist: writing a new Spock spec
 
 1. **Pick the narrowest scope** — pure unit spec > test slice > full `@SpringBootTest` (see Decision guide).
@@ -327,7 +348,8 @@ class SampleIntegrationSpec extends Specification {
 3. **Structure blocks**: `given:` → `when:` → `then:`, or `expect:` for pure functions. One stimulus per when/then pair.
 4. **Choose mocks**: Spock `Mock()`/`Stub()`/`Spy()` by default; inject into Spring context via `@SpringBean`/`@SpringSpy`/`@StubBeans`, not `@MockBean`.
 5. **If parameterizing**, build a `where:` table — inputs `||` outputs, no `@Unroll` needed, keep columns few and focused.
-6. **If it needs infra** (DB, queue), reach for the matching test slice first; only use Testcontainers + `@SpringBootTest` if you truly need the wired app against a real backing service.
-7. **Check fixture scope** — no mocks or mutable state in `@Shared`/static fields; use `setup()`/`cleanup()` for per-feature reset.
-8. **Verify build wiring** — Maven: Surefire includes `**/*Spec`; Gradle: `useJUnitPlatform()` is set. Confirm the new spec actually runs, not just compiles.
-9. **Sanity-check coverage output** if relevant — ignore JaCoCo's Groovy closure/end-of-method noise rather than writing tests to chase it.
+6. **Cover scenario breadth**: main happy path, other valid/edge paths, and exception/error paths for the unit under test (see Coverage expectations) — don't stop at the happy path alone.
+7. **If it needs infra** (DB, queue), reach for the matching test slice first; only use Testcontainers + `@SpringBootTest` if you truly need the wired app against a real backing service.
+8. **Check fixture scope** — no mocks or mutable state in `@Shared`/static fields; use `setup()`/`cleanup()` for per-feature reset.
+9. **Verify build wiring** — Maven: Surefire includes `**/*Spec`; Gradle: `useJUnitPlatform()` is set. Confirm the new spec actually runs, not just compiles.
+10. **Sanity-check coverage output** if relevant — target ~80% and ignore JaCoCo's Groovy closure/end-of-method noise rather than writing tests to chase the number.
